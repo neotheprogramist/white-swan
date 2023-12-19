@@ -15,3 +15,5 @@ Cargo.lock
 
 # Envs
 .cargo/
+
+Pipfile.lock

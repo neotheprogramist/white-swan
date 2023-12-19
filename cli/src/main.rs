@@ -1,7 +1,7 @@
 use std::env;
 
 use exchange::{
-  bybit::Bybit,
+  bybit::{Bybit, SubmitRequest},
   order::Request,
   traits::{BalancesManager, FromApi, OrderManager, PairGenerator, StreamFactory},
 };
@@ -15,6 +15,11 @@ async fn main() {
   tracing_subscriber::fmt().init();
 
   let bybit = Bybit::new();
+  let response = bybit.get_balances().await;
+  let data = response.text().await.unwrap();
+  tracing::info!("response: {:?}", data);
+  return;
+
   let mut order_book_stream = bybit.watch_order_book("BTCUSDT").await;
   let mut active_orders_stream = bybit.watch_active_orders().await;
 

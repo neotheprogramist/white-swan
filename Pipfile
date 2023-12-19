@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 aiohttp = "*"
+requests = "*"
+pybit = "*"
 
 [dev-packages]
 
