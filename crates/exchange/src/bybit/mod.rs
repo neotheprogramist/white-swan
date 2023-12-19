@@ -82,10 +82,83 @@ impl CancelAllRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct OrderBookResponse {
+  topic: String,
+  ts: u64,
+  #[serde(rename = "type")]
+  t: String,
+  data: OrderBookDataResponse,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OrderBookDataResponse {
+  s: String,
+  b: Vec<PriceVolumePair>,
+  a: Vec<PriceVolumePair>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PriceVolumePair(String, String);
+
+#[derive(Debug, Deserialize, Serialize)]
 struct WsRequest {
   pub req_id: String,
   pub op: String,
   pub args: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveOrdersResponse {
+  pub topic: String,
+  pub id: String,
+  pub creation_time: u64,
+  pub data: Vec<OrderData>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderData {
+  pub category: String,
+  pub symbol: String,
+  pub order_id: String,
+  pub order_link_id: String,
+  pub block_trade_id: String,
+  pub side: String,
+  pub position_idx: u32,
+  pub order_status: String,
+  pub cancel_type: String,
+  pub reject_reason: String,
+  pub time_in_force: String,
+  pub is_leverage: String,
+  pub price: String,
+  pub qty: String,
+  pub avg_price: String,
+  pub leaves_qty: String,
+  pub leaves_value: String,
+  pub cum_exec_qty: String,
+  pub cum_exec_value: String,
+  pub cum_exec_fee: String,
+  pub order_type: String,
+  pub stop_order_type: String,
+  pub order_iv: String,
+  pub trigger_price: String,
+  pub take_profit: String,
+  pub stop_loss: String,
+  pub trigger_by: String,
+  pub tp_trigger_by: String,
+  pub sl_trigger_by: String,
+  pub trigger_direction: u32,
+  pub place_type: String,
+  pub last_price_on_created: String,
+  pub close_on_trigger: bool,
+  pub reduce_only: bool,
+  pub smp_group: u32,
+  pub smp_type: String,
+  pub smp_order_id: String,
+  pub market_unit: String,
+  pub created_time: String,
+  pub updated_time: String,
+  pub fee_currency: String,
 }
 
 impl Bybit {
@@ -103,9 +176,9 @@ impl Bybit {
     }
   }
 
-  pub async fn get_balances(&self) -> Response {
+  pub async fn get_balances(&self, coin: &str) -> Response {
     let timestamp = Utc::now().timestamp_millis();
-    let request = GetBalancesRequest::new("USDT");
+    let request = GetBalancesRequest::new(coin);
     let qs = serde_qs::to_string(&request).unwrap();
 
     let param_str = format!("{}{}{}", timestamp, self.api_key, qs);
@@ -183,7 +256,10 @@ impl Bybit {
       .unwrap()
   }
 
-  pub async fn watch_order_book(&self, symbol: &str) -> Pin<Box<dyn Stream<Item = String>>> {
+  pub async fn watch_order_book(
+    &self,
+    symbol: &str,
+  ) -> Pin<Box<dyn Stream<Item = Result<OrderBookResponse, String>>>> {
     let (mut ws, _) = connect_async(Url::parse(self.public_wss_url.as_str()).unwrap())
       .await
       .unwrap();
@@ -200,20 +276,42 @@ impl Bybit {
 
     stream::unfold(ws, |mut ws| async {
       match ws.next().await {
-        Some(Ok(Message::Text(text))) => Some((text, ws)),
+        Some(Ok(Message::Text(text))) => {
+          tracing::info!("text: {}", text);
+          let x: OrderBookResponse = match serde_json::from_str(&text) {
+            Ok(x) => x,
+            Err(e) => {
+              tracing::error!("err: {}", e);
+              return Some((Err(e.to_string()), ws));
+            }
+          };
+          Some((Ok(x), ws))
+        }
         Some(Ok(Message::Ping(x))) => {
+          tracing::info!("ping: {:?}", x);
           ws.send(Message::Pong(x)).await.unwrap();
           None
         }
-        Some(Err(e)) => Some((e.to_string(), ws)),
-        Some(_) => None, // Ignore other messages
-        None => None,    // Stream ended
+        Some(Err(e)) => {
+          tracing::error!("err: {}", e);
+          Some((Err(e.to_string()), ws))
+        }
+        Some(x) => {
+          tracing::info!("other: {:?}", x);
+          None
+        }
+        None => {
+          tracing::info!("none");
+          None
+        }
       }
     })
     .boxed()
   }
 
-  pub async fn watch_active_orders(&self) -> Pin<Box<dyn Stream<Item = String>>> {
+  pub async fn watch_active_orders(
+    &self,
+  ) -> Pin<Box<dyn Stream<Item = Result<ActiveOrdersResponse, String>>>> {
     let (mut ws, _) = connect_async(Url::parse(self.private_wss_url.as_str()).unwrap())
       .await
       .unwrap();
@@ -230,7 +328,7 @@ impl Bybit {
 
     let auth_request = WsRequest {
       req_id: Uuid::new_v4().to_string(),
-      op: "auth".to_string(),
+      op: "authKeyExpires".to_string(),
       args: vec![self.api_key.clone(), expires.to_string(), signature_hex],
     };
 
@@ -252,20 +350,27 @@ impl Bybit {
       match ws.next().await {
         Some(Ok(Message::Text(text))) => {
           tracing::info!("text: {}", text);
-          Some((text, ws))
+          let x: ActiveOrdersResponse = match serde_json::from_str(&text) {
+            Ok(x) => x,
+            Err(e) => {
+              tracing::error!("err: {}", e);
+              return Some((Err("err".to_string()), ws));
+            }
+          };
+          Some((Ok(x), ws))
         }
         Some(Ok(Message::Ping(x))) => {
           tracing::info!("ping: {:?}", x);
           ws.send(Message::Pong(x)).await.unwrap();
-          None
+          Some((Err("pong".to_string()), ws))
         }
         Some(Err(e)) => {
           tracing::error!("err: {}", e);
-          Some((e.to_string(), ws))
+          Some((Err("err".to_string()), ws))
         }
         Some(x) => {
           tracing::info!("other: {:?}", x);
-          None
+          Some((Err("other".to_string()), ws))
         }
         None => {
           tracing::info!("none");

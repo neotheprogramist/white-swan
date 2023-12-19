@@ -57,8 +57,3 @@ impl PairGenerator for Exchange {
     unimplemented!("get_pair")
   }
 }
-
-#[cfg(test)]
-mod test {
-
-}
