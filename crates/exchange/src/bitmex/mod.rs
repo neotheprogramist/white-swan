@@ -27,10 +27,10 @@ pub struct Bitmex {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmitRequest {
-  symbol: String,
-  side: String,
-  order_qty: String,
-  price: String,
+  pub symbol: String,
+  pub side: String,
+  pub order_qty: String,
+  pub price: String,
 }
 impl SubmitRequest {
   pub fn new(
@@ -114,58 +114,33 @@ struct WsRequest {
 pub struct ActiveOrdersResponse {
     pub table: String,
     pub action: String,
-    pub keys: Vec<String>,
-    pub types: OrderTypes,
-    pub filter: AccountFilter,
     pub data: Vec<OrderData>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OrderTypes {
+pub struct OrderData {
     #[serde(rename = "orderID")]
     pub order_id: String,
-    #[serde(rename = "clOrdID")]
-    pub cl_ord_id: String,
-    #[serde(rename = "clOrdLinkID")]
-    pub cl_ord_link_id: String,
-    pub account: String,
+    pub account: i64,
     pub symbol: String,
     pub side: String,
-    pub order_qty: String,
-    pub price: String,
-    pub display_qty: String,
-    pub stop_px: String,
-    pub peg_offset_value: String,
-    pub peg_price_type: String,
+    pub order_qty: f64,
+    pub price: f64,
+    pub display_qty: Option<f64>,
+    pub stop_px: Option<f64>,
+    pub peg_offset_value: Option<f64>,
     pub currency: String,
-    pub settl_currency: String,
     pub ord_type: String,
     pub time_in_force: String,
-    pub exec_inst: String,
-    pub contingency_type: String,
     pub ord_status: String,
-    pub triggered: String,
-    pub working_indicator: String,
-    pub ord_rej_reason: String,
-    pub leaves_qty: String,
-    pub cum_qty: String,
-    pub avg_px: String,
-    pub text: String,
+    pub working_indicator: bool,
+    pub leaves_qty: f64,
+    pub cum_qty: f64,
+    pub avg_px: Option<f64>,
+    pub text: Option<String>,
     pub transact_time: String,
     pub timestamp: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AccountFilter {
-    pub account: i64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OrderData {
-    // Add fields here based on the structure of the objects in the "data" array
 }
 
 impl Bitmex {

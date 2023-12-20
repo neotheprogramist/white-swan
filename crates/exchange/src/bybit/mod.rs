@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, pin::Pin};
+use std::{collections::HashMap, env, pin::Pin, str::FromStr};
 
 use chrono::Utc;
 use futures::{stream, SinkExt, Stream, StreamExt};
@@ -83,22 +83,22 @@ impl CancelAllRequest {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OrderBookResponse {
-  topic: String,
-  ts: u64,
+  pub topic: String,
+  pub ts: u64,
   #[serde(rename = "type")]
-  t: String,
-  data: OrderBookDataResponse,
+  pub t: String,
+  pub data: OrderBookDataResponse,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OrderBookDataResponse {
-  s: String,
-  b: Vec<PriceVolumePair>,
-  a: Vec<PriceVolumePair>,
+  pub s: String,
+  pub b: Vec<PriceVolumePair>,
+  pub a: Vec<PriceVolumePair>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct PriceVolumePair(String, String);
+pub struct PriceVolumePair(pub String, pub String);
 
 #[derive(Debug, Deserialize, Serialize)]
 struct WsRequest {
@@ -120,7 +120,6 @@ pub struct ActiveOrdersResponse {
 pub struct OrderData {
   pub category: String,
   pub symbol: String,
-  pub order_id: String,
   pub order_link_id: String,
   pub block_trade_id: String,
   pub side: String,
@@ -152,13 +151,77 @@ pub struct OrderData {
   pub last_price_on_created: String,
   pub close_on_trigger: bool,
   pub reduce_only: bool,
-  pub smp_group: u32,
-  pub smp_type: String,
-  pub smp_order_id: String,
-  pub market_unit: String,
-  pub created_time: String,
-  pub updated_time: String,
-  pub fee_currency: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetBalancesResponse {
+  pub ret_code: i32,
+  pub ret_msg: String,
+  pub result: GetBalancesResult,
+  pub ret_ext_info: serde_json::Value,
+  pub time: i64,
+}
+
+impl FromStr for GetBalancesResponse {
+  type Err = serde_json::Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    serde_json::from_str(s)
+  }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetBalancesResult {
+  pub list: Vec<GetBalancesAccount>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetBalancesAccount {
+  pub total_equity: String,
+  #[serde(rename = "accountIMRate")]
+  pub account_im_rate: String,
+  pub total_margin_balance: String,
+  pub total_initial_margin: String,
+  pub account_type: String,
+  pub total_available_balance: String,
+  #[serde(rename = "accountMMRate")]
+  pub account_mm_rate: String,
+  #[serde(rename = "totalPerpUPL")]
+  pub total_perp_upl: String,
+  pub total_wallet_balance: String,
+  #[serde(rename = "accountLTV")]
+  pub account_ltv: String,
+  pub total_maintenance_margin: String,
+  pub coin: Vec<GetBalancesCoin>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetBalancesCoin {
+  pub available_to_borrow: String,
+  pub bonus: String,
+  pub accrued_interest: String,
+  pub available_to_withdraw: String,
+  #[serde(rename = "totalOrderIM")]
+  pub total_order_im: String,
+  pub equity: String,
+  #[serde(rename = "totalPositionMM")]
+  pub total_position_mm: String,
+  pub usd_value: String,
+  pub unrealised_pnl: String,
+  pub collateral_switch: bool,
+  pub spot_hedging_qty: String,
+  pub borrow_amount: String,
+  #[serde(rename = "totalPositionIM")]
+  pub total_position_im: String,
+  pub wallet_balance: String,
+  pub cum_realised_pnl: String,
+  pub locked: String,
+  pub margin_collateral: bool,
+  pub coin: String,
 }
 
 impl Bybit {
@@ -176,7 +239,7 @@ impl Bybit {
     }
   }
 
-  pub async fn get_balances(&self, coin: &str) -> Response {
+  pub async fn get_balances(&self, coin: &str) -> Result<GetBalancesResponse, serde_json::Error> {
     let timestamp = Utc::now().timestamp_millis();
     let request = GetBalancesRequest::new(coin);
     let qs = serde_qs::to_string(&request).unwrap();
@@ -201,9 +264,13 @@ impl Bybit {
       .send()
       .await
       .unwrap()
+      .text()
+      .await
+      .unwrap()
+      .parse()
   }
 
-  pub async fn submit_requests(&self, request: SubmitRequest) -> Response {
+  pub async fn submit_request(&self, request: SubmitRequest) -> Response {
     let timestamp = Utc::now().timestamp_millis();
     let payload = serde_json::to_string(&request).unwrap();
 
